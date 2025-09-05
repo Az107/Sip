@@ -69,7 +69,7 @@ impl HttpResponse {
                         continue;
                     }
                     let (k, v) = line.split_once(":").unwrap();
-                    let k = k.trim().to_string();
+                    let k = k.trim().to_string().to_lowercase();
                     let v = v.trim().to_string();
                     headers.insert(k, v);
                 }

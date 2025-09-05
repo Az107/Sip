@@ -54,9 +54,9 @@ impl HttpRequest {
         for (k, v) in &self.headers {
             result.push_str(&format!("{}: {}\r\n", k, v));
         }
-
+        result.push_str("\r\n");
         result.push_str(&self.text().unwrap_or_default());
-        result.push_str("\r\n\r\n");
+        result.push_str("\r\n");
 
         result
     }

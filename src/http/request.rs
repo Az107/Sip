@@ -56,7 +56,7 @@ impl HttpRequest {
         let method = HttpMethod::from_str(raw_method);
         let mut headers = HashMap::new();
         while let Some(line) = lines.next() {
-            if !line.contains(':') {
+            if !line.contains(':') || line.len() <= 1 {
                 break;
             }
             let (k, v) = line.split_once(":").unwrap();
@@ -67,7 +67,13 @@ impl HttpRequest {
         if !headers.contains_key("host") {
             headers.insert("host".to_string(), host.clone());
         }
-        let body = Vec::new();
+        let mut body = Vec::new();
+        while let Some(line) = lines.next() {
+            body.extend_from_slice(line.as_bytes());
+        }
+        if !headers.contains_key("content-length") {
+            headers.insert("content-length".to_string(), body.len().to_string());
+        }
         let request = HttpRequest {
             host,
             method,
@@ -76,6 +82,8 @@ impl HttpRequest {
             headers,
             body,
         };
+
+        println!("{:?}", request);
 
         return Ok(request);
     }

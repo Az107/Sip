@@ -2,6 +2,7 @@ mod http;
 use std::{collections::HashMap, env};
 
 use http::HttpRequest;
+use serde_json::{Value, to_string_pretty};
 
 fn parse_http_file(content: String) -> Vec<(String, HttpRequest)> {
     let mut result: Vec<(String, HttpRequest)> = Vec::new();
@@ -40,13 +41,37 @@ fn parse_http_file(content: String) -> Vec<(String, HttpRequest)> {
 
 fn main() {
     let mut input = String::new();
+    let mut body = String::new();
     // let mut body = String::new();
     for arg in env::args().skip(1) {
-        println!("{}", arg);
-        // if !input.is_empty() &&
+        let is_empty = input.is_empty();
+
+        if !is_empty && arg.contains('=') {
+            if body.is_empty() {
+                body.push('{');
+            }
+            let (k, v) = arg.split_once('=').unwrap();
+            body.push_str(&format!("\"{}\":\"{}\"", k, v));
+            body.push(',');
+            continue;
+        }
         input.push_str(&arg);
-        input.push('\n');
+        if !is_empty {
+            input.push('\n');
+        } else {
+            input.push(' ');
+        }
     }
+    if body.starts_with('{') && !body.ends_with('}') {
+        body.pop();
+        body.push('}');
+    }
+
+    if !body.is_empty() {
+        input.push_str("\r\n");
+        input.push_str(&body);
+    }
+
     let request = HttpRequest::parse(input);
     if request.is_err() {
         println!("Error: {}", request.err().unwrap());
@@ -63,9 +88,45 @@ fn main() {
     } else {
         let response = response.unwrap();
         println!("{:?}", response.status.to_string());
-        println!(
-            "{:?}",
-            str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
-        );
+        for header in response.headers.iter() {
+            println!("- {}: {}", header.0, header.1);
+        }
+        if response.headers.contains_key("content-type") {
+            let content_type = response.headers.get("content-type").unwrap();
+            match content_type.as_str() {
+                "application/json" => {
+                    if let Ok(raw) = str::from_utf8(response.content.as_slice()) {
+                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) {
+                            let text = serde_json::to_string_pretty(&value).unwrap();
+                            println!("{}", text);
+                        } else {
+                            println!("{}", raw);
+                        }
+                    } else {
+                        println!("Error priting body");
+                    };
+                }
+                _ => {
+                    if response.content.len() > 1024 {
+                        println!("<Binary {}>", response.content.len())
+                    } else {
+                        println!(
+                            "{}",
+                            str::from_utf8(response.content.as_slice())
+                                .unwrap_or("Error priting body")
+                        );
+                    }
+                }
+            }
+        } else {
+            if response.content.len() > 1024 {
+                println!("<Binary {}>", response.content.len())
+            } else {
+                println!(
+                    "{}",
+                    str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
+                );
+            }
+        }
     }
 }
