@@ -10,9 +10,6 @@
 use super::{HttpMethod, HttpStatus};
 use std::{collections::HashMap, default, net::TcpStream, str};
 
-const MAX_HEADER_SIZE: usize = 1024 * 16;
-const MAX_HEADER_COUNT: usize = 100;
-
 /// Represents a parsed HTTP request.
 ///
 /// Contains method, path, optional query arguments, headers, body, and a stream (for low-level access).
@@ -48,7 +45,7 @@ impl HttpRequest {
         let path = path
             .strip_prefix("http://")
             .unwrap_or(path.strip_prefix("https://").unwrap_or(path));
-        let (host, path) = path.split_once('/').unwrap();
+        let (host, path) = path.split_once('/').unwrap_or((path, ""));
         let host = host.to_string();
         // let (path, args) = path.split_once("?").unwrap();
         let mut path = path.to_string();
@@ -82,8 +79,6 @@ impl HttpRequest {
             headers,
             body,
         };
-
-        println!("{:?}", request);
 
         return Ok(request);
     }
