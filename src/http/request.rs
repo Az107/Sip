@@ -15,6 +15,7 @@ use std::{collections::HashMap, default, net::TcpStream, str};
 /// Contains method, path, optional query arguments, headers, body, and a stream (for low-level access).
 #[derive(Debug)]
 pub struct HttpRequest {
+    pub ssl: bool,
     pub host: String,
     pub method: HttpMethod,
     pub path: String,
@@ -27,6 +28,7 @@ impl HttpRequest {
     /// Creates a new HTTP request with the given method and path.
     pub fn new(method: HttpMethod, host: &str, path: &str) -> Self {
         return HttpRequest {
+            ssl: false,
             method,
             host: host.to_string(),
             path: path.to_string(),
@@ -37,11 +39,15 @@ impl HttpRequest {
     }
 
     pub fn parse(raw: String) -> Result<Self, &'static str> {
+        let mut ssl = false;
         let mut lines = raw.split('\n');
         let status_line = lines.next().ok_or("invalid status")?.to_string();
         let (raw_method, path) = status_line.split_once(" ").ok_or("Invalud status")?;
         let raw_method = raw_method.trim();
         let path = path.trim();
+        if path.starts_with("https://") {
+            ssl = true;
+        }
         let path = path
             .strip_prefix("http://")
             .unwrap_or(path.strip_prefix("https://").unwrap_or(path));
@@ -73,6 +79,7 @@ impl HttpRequest {
         }
         let request = HttpRequest {
             host,
+            ssl,
             method,
             path,
             args: HashMap::new(),
@@ -87,6 +94,7 @@ impl HttpRequest {
     pub fn default() -> Self {
         HttpRequest {
             method: HttpMethod::Other(String::new()),
+            ssl: false,
             path: String::new(),
             host: String::new(),
             args: HashMap::new(),
@@ -99,6 +107,7 @@ impl HttpRequest {
     pub fn clone(&self) -> Self {
         return HttpRequest {
             method: self.method.clone(),
+            ssl: self.ssl.clone(),
             host: self.host.clone(),
             path: self.path.clone(),
             args: self.args.clone(),

@@ -4,4 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-serde_json = "1.0.143"
+serde_json = {version = "1.0.143", optional = true}
+html2text = { version = "0.15.5", optional = true, features= ["css"] }
+
+native-tls = "0.2.14"
+
+[features]
+# default = ["render_body"]
+render_body = ["html2text", "serde_json"]

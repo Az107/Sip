@@ -4,14 +4,20 @@
 // methods to compose and send HTTP requests and parse the resulting
 // responses using a `TcpStream`.
 
-use std::io::{Read, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
+use native_tls::TlsConnector;
+
 use super::request::HttpRequest;
 use super::response::HttpResponse;
+
 // use super::status::HttpStatus;
 // use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+//
+trait StreamRW: Read + Write {}
+impl<T: Read + Write> StreamRW for T {}
 
 impl HttpRequest {
     /// Adds a query argument to the HTTP request.
@@ -67,18 +73,23 @@ impl HttpRequest {
     /// and open a TCP connection. Times out after 5 seconds.
     pub fn brew(&self) -> Result<HttpResponse, &'static str> {
         let mut addr = self.host.clone();
-
+        let mut ssl = self.ssl;
         // Strip protocol prefix
         if let Some(stripped) = addr.strip_prefix("http://") {
             addr = stripped.to_string();
         } else if addr.starts_with("https://") {
-            return Err("HTTPS not implemented yet");
+            ssl = true;
         }
 
         // Add port if missing
         if !addr.contains(':') {
-            addr.push_str(":80");
+            if ssl {
+                addr.push_str(":443");
+            } else {
+                addr.push_str(":80");
+            }
         }
+        println!("{}", addr);
 
         let addr = addr.split("/").next().unwrap();
         // Resolve address
@@ -97,16 +108,31 @@ impl HttpRequest {
             .into_iter()
             .find(|addr| addr.port() != 0 && !addr.ip().is_unspecified())
             .ok_or("No valid address found")?;
-
+        if socket_addr.port() == 443 {
+            ssl = true;
+        }
         // Connect to server
         let stream = TcpStream::connect_timeout(&socket_addr, Duration::from_secs(5))
             .map_err(|_| "Error connecting to server")?;
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+        let mut stream: Box<dyn StreamRW> = if ssl {
+            // 1. Crear el conector TLS
+            let connector = TlsConnector::new().map_err(|_| "SLL error")?;
+            let (hostname, _) = self
+                .host
+                .split_once(':')
+                .unwrap_or((&self.host, &self.host));
+            let stream = connector.connect(&hostname, stream).map_err(|e| {
+                println!("host: {} \n error: {:?}", hostname, e);
+                "SLL error"
+            })?;
+            Box::new(stream)
+        } else {
+            Box::new(stream)
+        };
 
-        let mut stream = stream;
         let _ = stream.write_all(self.to_string().as_bytes());
         let _ = stream.flush();
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-
         let mut raw: Vec<u8> = Vec::new();
         let mut buffer = [0u8; 4096];
 
@@ -124,7 +150,10 @@ impl HttpRequest {
                     println!("Read timeout");
                     break;
                 }
-                Err(_e) => return Err("Error reading"),
+                Err(e) => {
+                    println!("{:?}", e);
+                    return Err("Error reading");
+                }
             }
         }
 

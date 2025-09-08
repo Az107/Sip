@@ -1,8 +1,79 @@
 mod http;
 use std::{collections::HashMap, env};
 
-use http::HttpRequest;
-use serde_json::{Value, to_string_pretty};
+use http::{HttpRequest, HttpResponse};
+
+#[cfg(feature = "render_body")]
+fn render_body(response: HttpResponse) {
+    use html2text::config;
+    use serde_json::{Value, to_string_pretty};
+    if response.headers.contains_key("content-type") {
+        let content_type = response.headers.get("content-type").unwrap();
+        let content_type = content_type
+            .split_once(';')
+            .unwrap_or((content_type, content_type))
+            .0;
+        match content_type {
+            "application/json" => {
+                if let Ok(raw) = str::from_utf8(response.content.as_slice()) {
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) {
+                        let text = serde_json::to_string_pretty(&value).unwrap();
+                        println!("{}", text);
+                    } else {
+                        println!("{}", raw);
+                    }
+                } else {
+                    println!("Error priting body");
+                };
+            }
+            "text/html" => {
+                if let Ok(raw) = str::from_utf8(response.content.as_slice()) {
+                    if let Ok(value) = config::rich()
+                        .use_doc_css()
+                        .string_from_read(raw.as_bytes(), 80)
+                    {
+                        println!("{}", value);
+                    } else {
+                        println!("{}", raw);
+                    }
+                } else {
+                    println!("Error priting body");
+                };
+            }
+            _ => {
+                if response.content.len() > 1024 {
+                    println!("<Binary {}>", response.content.len())
+                } else {
+                    println!(
+                        "{}",
+                        str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
+                    );
+                }
+            }
+        }
+    } else {
+        if response.content.len() > 1024 {
+            println!("<Binary {}>", response.content.len())
+        } else {
+            println!(
+                "{}",
+                str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
+            );
+        }
+    }
+}
+
+#[cfg(not(feature = "render_body"))]
+fn render_body(response: HttpResponse) {
+    if response.content.len() > 1024 * 10 {
+        println!("<Binary {}>", response.content.len())
+    } else {
+        println!(
+            "{}",
+            str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
+        );
+    }
+}
 
 fn parse_http_file(content: String) -> Vec<(String, HttpRequest)> {
     let mut result: Vec<(String, HttpRequest)> = Vec::new();
@@ -91,42 +162,7 @@ fn main() {
         for header in response.headers.iter() {
             println!("- {}: {}", header.0, header.1);
         }
-        if response.headers.contains_key("content-type") {
-            let content_type = response.headers.get("content-type").unwrap();
-            match content_type.as_str() {
-                "application/json" => {
-                    if let Ok(raw) = str::from_utf8(response.content.as_slice()) {
-                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) {
-                            let text = serde_json::to_string_pretty(&value).unwrap();
-                            println!("{}", text);
-                        } else {
-                            println!("{}", raw);
-                        }
-                    } else {
-                        println!("Error priting body");
-                    };
-                }
-                _ => {
-                    if response.content.len() > 1024 {
-                        println!("<Binary {}>", response.content.len())
-                    } else {
-                        println!(
-                            "{}",
-                            str::from_utf8(response.content.as_slice())
-                                .unwrap_or("Error priting body")
-                        );
-                    }
-                }
-            }
-        } else {
-            if response.content.len() > 1024 {
-                println!("<Binary {}>", response.content.len())
-            } else {
-                println!(
-                    "{}",
-                    str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
-                );
-            }
-        }
+        println!("\n");
+        render_body(response);
     }
 }
