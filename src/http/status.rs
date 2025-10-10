@@ -11,7 +11,7 @@
 ///
 /// Use [`HttpStatus::from_u16`] to convert from raw codes,
 /// and [`HttpStatus::to_string`] to get the standard reason phrase.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum HttpStatus {
     // 2xx Success
     OK = 200,
@@ -142,6 +142,14 @@ impl HttpStatus {
 
             _ => Err("Invalid HTTP status"),
         }
+    }
+
+    pub fn as_num(&self) -> usize {
+        *self as usize
+    }
+
+    pub fn is_ok(&self) -> bool {
+        self.as_num() >= 200 && self.as_num() <= 299
     }
 
     /// Returns the standard reason phrase for this status code.

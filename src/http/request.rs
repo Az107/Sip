@@ -7,8 +7,10 @@
 // - No URI normalization or encoding
 //
 
-use super::{HttpMethod, HttpStatus};
-use std::{collections::HashMap, default, net::TcpStream, str};
+use crate::http::HttpHeaders;
+
+use super::HttpMethod;
+use std::{collections::HashMap, str};
 
 /// Represents a parsed HTTP request.
 ///
@@ -20,7 +22,7 @@ pub struct HttpRequest {
     pub method: HttpMethod,
     pub path: String,
     pub args: HashMap<String, String>,
-    pub headers: HashMap<String, String>,
+    pub headers: HttpHeaders,
     pub body: Vec<u8>,
 }
 
@@ -33,7 +35,7 @@ impl HttpRequest {
             host: host.to_string(),
             path: path.to_string(),
             args: HashMap::new(),
-            headers: HashMap::new(),
+            headers: HttpHeaders::new(),
             body: Vec::new(),
         };
     }
@@ -57,25 +59,25 @@ impl HttpRequest {
         let mut path = path.to_string();
         path.insert(0, '/');
         let method = HttpMethod::from_str(raw_method);
-        let mut headers = HashMap::new();
+        let mut headers = HttpHeaders::new();
         while let Some(line) = lines.next() {
             if !line.contains(':') || line.len() <= 1 {
                 break;
             }
             let (k, v) = line.split_once(":").unwrap();
-            let k = k.trim().to_lowercase().to_string();
-            let v = v.trim().to_string();
-            headers.insert(k, v);
+            let k = k.trim().to_lowercase();
+            let v = v.trim();
+            headers.insert(&k, v);
         }
         if !headers.contains_key("host") {
-            headers.insert("host".to_string(), host.clone());
+            headers.insert("host", &host);
         }
         let mut body = Vec::new();
         while let Some(line) = lines.next() {
             body.extend_from_slice(line.as_bytes());
         }
         if !headers.contains_key("content-length") && body.len() > 0 {
-            headers.insert("content-length".to_string(), body.len().to_string());
+            headers.insert("content-length", &body.len().to_string());
         }
         let request = HttpRequest {
             host,
@@ -98,7 +100,7 @@ impl HttpRequest {
             path: String::new(),
             host: String::new(),
             args: HashMap::new(),
-            headers: HashMap::new(),
+            headers: HttpHeaders::new(),
             body: Vec::new(),
         }
     }

@@ -1,7 +1,12 @@
 mod http;
-use std::{collections::HashMap, env};
+
+use std::{collections::HashMap, env, fs::File, io::Write, path::Path};
 
 use http::{HttpRequest, HttpResponse};
+
+use crate::http::HttpStatus;
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(feature = "render_body")]
 fn render_body(response: HttpResponse) {
@@ -64,7 +69,7 @@ fn render_body(response: HttpResponse) {
 }
 
 #[cfg(not(feature = "render_body"))]
-fn render_body(response: HttpResponse) {
+fn render_body(response: &HttpResponse) {
     if response.content.len() > 1024 * 10 {
         println!("<Binary {}>", response.content.len())
     } else {
@@ -113,8 +118,26 @@ fn parse_http_file(content: String) -> Vec<(String, HttpRequest)> {
 fn main() {
     let mut input = String::new();
     let mut body = String::new();
-    // let mut body = String::new();
+    let mut args: HashMap<String, String> = HashMap::new();
+    let mut skip = 1;
+    let mut k_arg = String::new();
     for arg in env::args().skip(1) {
+        if arg.starts_with("-") {
+            k_arg = arg.strip_prefix("-").unwrap().to_string();
+            k_arg = k_arg.strip_prefix("-").unwrap_or(&k_arg).to_string();
+            skip += 1;
+        } else {
+            if !k_arg.is_empty() {
+                args.insert(k_arg.clone(), arg.clone());
+                k_arg = String::new();
+                skip += 1;
+            } else {
+                break;
+            }
+        }
+    }
+    // let mut body = String::new();
+    for arg in env::args().skip(skip) {
         let is_empty = input.is_empty();
 
         if !is_empty && arg.contains('=') {
@@ -148,7 +171,10 @@ fn main() {
         println!("Error: {}", request.err().unwrap());
         return;
     }
-    let request = request.unwrap();
+    let mut request = request.unwrap();
+    request
+        .headers
+        .insert("User-Agent", &format!("Sip/{}", VERSION));
     // request
     //     .headers
     //     .insert("host".to_string(), "example.org".to_string());
@@ -163,6 +189,19 @@ fn main() {
             println!("- {}: {}", header.0, header.1);
         }
         println!("\n");
-        render_body(response);
+        render_body(&response);
+        if response.status.is_ok()
+            && let Some(file) = args.get("O")
+        {
+            let path = Path::new(file);
+            let mut file = if path.exists() {
+                File::open(path)
+            } else {
+                File::create(path)
+            }
+            .unwrap();
+
+            let _ = file.write_all(&response.content.as_slice());
+        };
     }
 }

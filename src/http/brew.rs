@@ -4,14 +4,14 @@
 // methods to compose and send HTTP requests and parse the resulting
 // responses using a `TcpStream`.
 
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 use native_tls::TlsConnector;
 
 use super::request::HttpRequest;
-use super::response::HttpResponse;
+use super::response::{HttpResponse, HttpResponseBuilder};
 
 // use super::status::HttpStatus;
 // use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -20,18 +20,6 @@ trait StreamRW: Read + Write {}
 impl<T: Read + Write> StreamRW for T {}
 
 impl HttpRequest {
-    /// Adds a query argument to the HTTP request.
-    pub fn arg(&mut self, key: &str, value: &str) -> &mut HttpRequest {
-        self.args.insert(key.to_string(), value.to_string());
-        self
-    }
-
-    /// Adds a header to the HTTP request.
-    pub fn header(&mut self, key: &str, value: &str) -> &mut HttpRequest {
-        self.headers.insert(key.to_string(), value.to_string());
-        self
-    }
-
     /// Converts the request into a raw HTTP/1.1-compliant string.
     ///
     /// This includes method, path with optional query args, headers, and optional body.
@@ -114,7 +102,7 @@ impl HttpRequest {
         // Connect to server
         let stream = TcpStream::connect_timeout(&socket_addr, Duration::from_secs(5))
             .map_err(|_| "Error connecting to server")?;
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(20)));
         let mut stream: Box<dyn StreamRW> = if ssl {
             // 1. Crear el conector TLS
             let connector = TlsConnector::new().map_err(|_| "SLL error")?;
@@ -133,39 +121,35 @@ impl HttpRequest {
 
         let _ = stream.write_all(self.to_string().as_bytes());
         let _ = stream.flush();
-        let mut raw: Vec<u8> = Vec::new();
+        let mut builder = HttpResponseBuilder::new();
         let mut buffer = [0u8; 4096];
 
         loop {
             match stream.read(&mut buffer) {
-                Ok(0) => break, // EOF
                 Ok(n) => {
-                    raw.extend_from_slice(&buffer[..n]);
-                    if n < 4096 {
-                        //TODO: write proper response parser
+                    let r = builder.append(&buffer[..n])?;
+                    if r {
                         break;
                     }
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     println!("Read timeout");
+                    println!("state: {:?}", builder.state);
+                    println!("Headers: {:?}", builder.headers);
+                    println!("body_len: {:?}", builder.body.len());
                     break;
                 }
                 Err(e) => {
                     println!("{:?}", e);
+                    println!("state: {:?}", builder.state);
+                    println!("body_len: {:?}", builder.body.len());
                     return Err("Error reading");
                 }
             }
         }
 
-        Ok(HttpResponse::parse(raw)?)
+        Ok(builder.get().unwrap())
     }
-}
-
-/// Alias to send a request via `request.brew()`.
-///
-/// Useful for calling as a standalone function.
-pub fn brew(request: &mut HttpRequest) -> Result<HttpResponse, &'static str> {
-    request.brew()
 }
 
 // pub fn brew_url(url: &str) -> Result<HttpResponse, &'static str> {
@@ -189,14 +173,14 @@ mod tests {
     #[test]
     fn test_http_request_arg() {
         let mut request = HttpRequest::new(HttpMethod::POST, "localhost", "/submit");
-        request.arg("key", "value");
+        request.args.insert("key".to_string(), "value".to_string());
         assert_eq!(request.args.get("key"), Some(&"value".to_string()));
     }
 
     #[test]
     fn test_http_request_header() {
         let mut request = HttpRequest::new(HttpMethod::GET, "localhost", "/data");
-        request.header("Content-Type", "application/json");
+        request.headers.insert("Content-Type", "application/json");
         assert_eq!(
             request.headers.get("Content-Type"),
             Some(&"application/json".to_string())
@@ -213,7 +197,7 @@ mod tests {
     #[test]
     fn test_http_request_to_string() {
         let mut request = HttpRequest::new(HttpMethod::POST, "localhost", "/resource");
-        request.header("Content-Type", "application/json");
+        request.headers.insert("Content-Type", "application/json");
         //.body("{\"data\":\"test\"}".to_string());
 
         let request_string = request.to_string();
