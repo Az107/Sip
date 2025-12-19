@@ -155,7 +155,7 @@ impl HttpStatus {
     /// Returns the standard reason phrase for this status code.
     ///
     /// For example: `HttpStatus::OK.to_string()` returns `"OK"`.
-    pub fn to_string(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             HttpStatus::OK => "OK",
             HttpStatus::Created => "Created",

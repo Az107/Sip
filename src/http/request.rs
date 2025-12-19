@@ -29,7 +29,7 @@ pub struct HttpRequest {
 impl HttpRequest {
     /// Creates a new HTTP request with the given method and path.
     pub fn new(method: HttpMethod, host: &str, path: &str) -> Self {
-        return HttpRequest {
+        HttpRequest {
             ssl: false,
             method,
             host: host.to_string(),
@@ -37,7 +37,7 @@ impl HttpRequest {
             args: HashMap::new(),
             headers: HttpHeaders::new(),
             body: Vec::new(),
-        };
+        }
     }
 
     pub fn parse(raw: String) -> Result<Self, &'static str> {
@@ -76,7 +76,7 @@ impl HttpRequest {
         while let Some(line) = lines.next() {
             body.extend_from_slice(line.as_bytes());
         }
-        if !headers.contains_key("content-length") && body.len() > 0 {
+        if !headers.contains_key("content-length") && body.is_empty() {
             headers.insert("content-length", &body.len().to_string());
         }
         let request = HttpRequest {
@@ -89,7 +89,7 @@ impl HttpRequest {
             body,
         };
 
-        return Ok(request);
+        Ok(request)
     }
 
     /// Returns a blank default request (empty method/path/headers).
@@ -107,26 +107,25 @@ impl HttpRequest {
 
     /// Returns a blank default request (empty method/path/headers).
     pub fn clone(&self) -> Self {
-        return HttpRequest {
+        HttpRequest {
             method: self.method.clone(),
-            ssl: self.ssl.clone(),
+            ssl: self.ssl,
             host: self.host.clone(),
             path: self.path.clone(),
             args: self.args.clone(),
             headers: self.headers.clone(),
             body: self.body.clone(),
-        };
+        }
     }
 
     /// Attempts to decode the body as UTF-8 and return it as text.
     pub fn text(&self) -> Option<String> {
-        if self.body.len() == 0 {
+        if self.body.is_empty() {
             return None;
         }
-        let body = match str::from_utf8(self.body.as_slice()) {
+        match str::from_utf8(self.body.as_slice()) {
             Ok(v) => Some(v.to_string()),
             Err(_e) => None,
-        };
-        return body;
+        }
     }
 }

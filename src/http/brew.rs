@@ -4,6 +4,7 @@
 // methods to compose and send HTTP requests and parse the resulting
 // responses using a `TcpStream`.
 
+use std::fmt::{self, Display, Formatter};
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
@@ -19,11 +20,11 @@ use super::response::{HttpResponse, HttpResponseBuilder};
 trait StreamRW: Read + Write {}
 impl<T: Read + Write> StreamRW for T {}
 
-impl HttpRequest {
+impl Display for HttpRequest {
     /// Converts the request into a raw HTTP/1.1-compliant string.
     ///
     /// This includes method, path with optional query args, headers, and optional body.
-    pub fn to_string(&self) -> String {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         // Add query parameters to the path if needed
         let path = if self.args.is_empty() {
             self.path.clone()
@@ -44,17 +45,17 @@ impl HttpRequest {
             path
         };
 
-        let mut result = format!("{} {} HTTP/1.1\r\n", self.method.to_str(), path);
+        write!(f, "{} {} HTTP/1.1\r\n", self.method.to_str(), path)?;
         for (k, v) in &self.headers {
-            result.push_str(&format!("{}: {}\r\n", k, v));
+            write!(f, "{}: {}\r\n", k, v)?;
         }
-        result.push_str("\r\n");
-        result.push_str(&self.text().unwrap_or_default());
-        result.push_str("\r\n");
-
-        result
+        write!(f, "\r\n")?;
+        write!(f, "{}", &self.text().unwrap_or_default())?;
+        write!(f, "\r\n")
     }
+}
 
+impl HttpRequest {
     /// Sends the request to a remote server and returns a parsed response.
     ///
     /// Supports only `http://` (not `https://`). Attempts to resolve the domain
@@ -110,7 +111,7 @@ impl HttpRequest {
                 .host
                 .split_once(':')
                 .unwrap_or((&self.host, &self.host));
-            let stream = connector.connect(&hostname, stream).map_err(|e| {
+            let stream = connector.connect(hostname, stream).map_err(|e| {
                 println!("host: {} \n error: {:?}", hostname, e);
                 "SLL error"
             })?;
@@ -123,10 +124,19 @@ impl HttpRequest {
         let _ = stream.flush();
         let mut builder = HttpResponseBuilder::new();
         let mut buffer = [0u8; 4096];
+        let mut zero_counter = 10;
 
         loop {
+            if zero_counter == 0 {
+                return Err("Connexion closed");
+            }
             match stream.read(&mut buffer) {
                 Ok(n) => {
+                    if n == 0 {
+                        zero_counter -= 1;
+                    } else {
+                        zero_counter = 10;
+                    }
                     let r = builder.append(&buffer[..n])?;
                     if r {
                         break;
@@ -162,8 +172,8 @@ mod tests {
     use super::*;
     #[test]
     fn test_http_request_new() {
-        let request = HttpRequest::new(HttpMethod::GET, "localhost", "/example");
-        assert_eq!(request.method, HttpMethod::GET);
+        let request = HttpRequest::new(HttpMethod::Get, "localhost", "/example");
+        assert_eq!(request.method, HttpMethod::Get);
         assert_eq!(request.path, "/example");
         assert!(request.args.is_empty());
         assert!(request.headers.is_empty());
@@ -172,14 +182,14 @@ mod tests {
 
     #[test]
     fn test_http_request_arg() {
-        let mut request = HttpRequest::new(HttpMethod::POST, "localhost", "/submit");
+        let mut request = HttpRequest::new(HttpMethod::Post, "localhost", "/submit");
         request.args.insert("key".to_string(), "value".to_string());
         assert_eq!(request.args.get("key"), Some(&"value".to_string()));
     }
 
     #[test]
     fn test_http_request_header() {
-        let mut request = HttpRequest::new(HttpMethod::GET, "localhost", "/data");
+        let mut request = HttpRequest::new(HttpMethod::Get, "localhost", "/data");
         request.headers.insert("Content-Type", "application/json");
         assert_eq!(
             request.headers.get("Content-Type"),
@@ -196,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_http_request_to_string() {
-        let mut request = HttpRequest::new(HttpMethod::POST, "localhost", "/resource");
+        let mut request = HttpRequest::new(HttpMethod::Post, "localhost", "/resource");
         request.headers.insert("Content-Type", "application/json");
         //.body("{\"data\":\"test\"}".to_string());
 
@@ -223,13 +233,13 @@ mod tests {
 
     #[test]
     fn test_http_request() {
-        let r = HttpRequest::new(HttpMethod::GET, "example.org:80", "/").brew();
+        let r = HttpRequest::new(HttpMethod::Get, "example.org:80", "/").brew();
         assert!(r.is_ok());
     }
 
     #[test]
     fn test_http_request_time_out() {
-        let r = HttpRequest::new(HttpMethod::GET, "example.org:8080", "/").brew();
+        let r = HttpRequest::new(HttpMethod::Get, "example.org:8080", "/").brew();
         assert!(r.is_err());
     }
 }
