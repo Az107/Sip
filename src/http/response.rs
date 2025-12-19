@@ -11,41 +11,7 @@ pub struct HttpResponse {
     pub content: Vec<u8>,
 }
 
-impl HttpResponse {
-    pub fn new<B: AsRef<[u8]>>(
-        status: HttpStatus,
-        content: B,
-        headers: Option<HttpHeaders>,
-    ) -> Box<Self> {
-        let content = content.as_ref();
-        let headers = headers.unwrap_or_default();
-        Box::new(Self {
-            status,
-            headers,
-            content: content.to_owned(),
-        })
-    }
-    /// Converts the status + headers into a properly formatted HTTP header block.
-    pub fn to_bytes(&mut self) -> Vec<u8> {
-        let mut headers_text = String::new();
-        for (key, value) in self.headers.iter() {
-            headers_text.push_str(&format!("{}: {}\r\n", key, value));
-        }
-
-        let response_header = format!(
-            "HTTP/1.1 {} {}\r\n{}\r\n",
-            self.status as u16,
-            self.status.to_string(),
-            headers_text
-        );
-
-        let mut response = Vec::new();
-        response.extend_from_slice(response_header.as_bytes());
-        response
-    }
-}
-
-use std::usize;
+use std::cmp::min;
 
 #[derive(Debug)]
 pub enum State {
@@ -61,6 +27,8 @@ pub struct HttpResponseBuilder {
     pub status: HttpStatus,
     buffer: Vec<u8>,
     pub state: State,
+    chunked: bool,
+    length: usize,
 }
 
 impl HttpResponseBuilder {
@@ -71,6 +39,8 @@ impl HttpResponseBuilder {
             body: Vec::new(),
             buffer: Vec::new(),
             state: State::Init,
+            length: 0,
+            chunked: false,
         }
     }
 
@@ -92,7 +62,7 @@ impl HttpResponseBuilder {
             match self.state {
                 State::Init => {
                     if let Some(line) = get_line(&mut self.buffer) {
-                        let parts: Vec<&str> = line.split(" ").collect();
+                        let parts: Vec<&str> = line.split_whitespace().collect();
                         if parts.len() < 3 {
                             println!("parts: {:?}", parts);
                             return Err("Invalid response");
@@ -114,26 +84,53 @@ impl HttpResponseBuilder {
                         let (k, v) = line.split_once(":").ok_or("Invalid header")?;
                         let k = k.trim().to_lowercase();
                         let v = v.trim();
+                        if k == "content-length" {
+                            self.length = v.parse().unwrap_or(0);
+                        }
+                        if k == "transfer-encoding" && v.to_lowercase() == "chunked" {
+                            self.chunked = true;
+                            self.length = v.parse().unwrap_or(0);
+                        }
                         self.headers.insert(&k, v);
                     } else {
                         return Ok(false);
                     }
                 }
                 State::Body => {
-                    self.body.extend_from_slice(&mut self.buffer.as_slice());
-                    self.buffer.clear();
-                    if let Some(content_length) = self.headers.get("content-length") {
-                        let content_length = content_length
-                            .parse::<usize>()
-                            .map_err(|_| "invalid content-length")?;
-                        if self.body.len() >= content_length {
-                            self.state = State::Finish;
-                            return Ok(true);
-                        } else {
+                    let body_left = self.length - self.body.len();
+                    if body_left > 0 {
+                        let to_take = min(body_left, self.buffer.len());
+                        let to_append = self.buffer.drain(..to_take);
+                        let to_append = to_append.as_slice();
+                        self.body.extend_from_slice(to_append);
+                        if to_append.len() < body_left {
                             return Ok(false);
                         }
-                    } else {
-                        //TODO: handle chunked
+                    }
+
+                    if self.chunked {
+                        let size = get_line(&mut self.buffer);
+                        if size.is_none() {
+                            self.length = 0;
+                            return Ok(false);
+                        }
+                        let size = size.unwrap();
+                        if size.is_empty() {
+                            continue;
+                        }
+                        let size = size.strip_prefix("0x").unwrap_or(&size);
+                        let size =
+                            i64::from_str_radix(size, 16).map_err(|_| "Invalud chunk size")?;
+                        if size == 0 {
+                            self.state = State::Finish;
+                            return Ok(true);
+                        }
+
+                        self.length += size as usize;
+                    }
+
+                    println!("{} {}", self.body.len(), self.length);
+                    if self.body.len() >= self.length {
                         self.state = State::Finish;
                         return Ok(true);
                     }

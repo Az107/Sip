@@ -4,12 +4,10 @@ use std::{collections::HashMap, env, fs::File, io::Write, path::Path};
 
 use http::{HttpRequest, HttpResponse};
 
-use crate::http::HttpStatus;
-
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(feature = "render_body")]
-fn render_body(response: HttpResponse) {
+fn render_body(response: &HttpResponse) {
     use html2text::config;
     use serde_json::{Value, to_string_pretty};
     if response.headers.contains_key("content-type") {
@@ -70,7 +68,7 @@ fn render_body(response: HttpResponse) {
 
 #[cfg(not(feature = "render_body"))]
 fn render_body(response: &HttpResponse) {
-    if response.content.len() > 1024 * 10 {
+    if response.content.len() > 1024 * 100 {
         println!("<Binary {}>", response.content.len())
     } else {
         println!(
@@ -92,8 +90,8 @@ fn parse_http_file(content: String) -> Vec<(String, HttpRequest)> {
                 raw_request = raw_request.replace(&k, v);
             }
             let request = HttpRequest::parse(raw_request.clone());
-            if request.is_ok() {
-                result.push(("".to_string(), request.unwrap()));
+            if let Ok(request) = request {
+                result.push(("".to_string(), request));
             }
             raw_request = String::new();
             continue;
@@ -112,7 +110,7 @@ fn parse_http_file(content: String) -> Vec<(String, HttpRequest)> {
         raw_request.push_str(line);
         raw_request.push('\n');
     }
-    return result;
+    result
 }
 
 fn main() {
@@ -126,14 +124,12 @@ fn main() {
             k_arg = arg.strip_prefix("-").unwrap().to_string();
             k_arg = k_arg.strip_prefix("-").unwrap_or(&k_arg).to_string();
             skip += 1;
+        } else if !k_arg.is_empty() {
+            args.insert(k_arg.clone(), arg.clone());
+            k_arg = String::new();
+            skip += 1;
         } else {
-            if !k_arg.is_empty() {
-                args.insert(k_arg.clone(), arg.clone());
-                k_arg = String::new();
-                skip += 1;
-            } else {
-                break;
-            }
+            break;
         }
     }
     // let mut body = String::new();
@@ -180,11 +176,9 @@ fn main() {
     //     .insert("host".to_string(), "example.org".to_string());
 
     let response = request.brew();
-    if response.is_err() {
-        println!("{:?}", response.err())
-    } else {
-        let response = response.unwrap();
-        println!("{:?}", response.status.to_string());
+
+    if let Ok(response) = response {
+        println!("{:?}", response.status.as_str());
         for header in response.headers.iter() {
             println!("- {}: {}", header.0, header.1);
         }
@@ -201,7 +195,9 @@ fn main() {
             }
             .unwrap();
 
-            let _ = file.write_all(&response.content.as_slice());
+            let _ = file.write_all(response.content.as_slice());
         };
+    } else {
+        println!("{:?}", response.err())
     }
 }
