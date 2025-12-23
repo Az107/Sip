@@ -12,3 +12,4 @@ native-tls = "0.2.14"
 [features]
 # default = ["render_body"]
 render_body = ["html2text", "serde_json"]
+config_file = []

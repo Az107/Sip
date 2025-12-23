@@ -129,7 +129,6 @@ impl HttpResponseBuilder {
                         self.length += size as usize;
                     }
 
-                    println!("{} {}", self.body.len(), self.length);
                     if self.body.len() >= self.length {
                         self.state = State::Finish;
                         return Ok(true);

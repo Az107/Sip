@@ -76,9 +76,9 @@ impl HttpRequest {
         while let Some(line) = lines.next() {
             body.extend_from_slice(line.as_bytes());
         }
-        if !headers.contains_key("content-length") && body.is_empty() {
-            headers.insert("content-length", &body.len().to_string());
-        }
+        // if !headers.contains_key("content-length") && body.is_empty() {
+        //     headers.insert("content-length", &body.len().to_string());
+        // }
         let request = HttpRequest {
             host,
             ssl,

@@ -78,7 +78,6 @@ impl HttpRequest {
                 addr.push_str(":80");
             }
         }
-        println!("{}", addr);
 
         let addr = addr.split("/").next().unwrap();
         // Resolve address

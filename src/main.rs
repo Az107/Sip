@@ -1,83 +1,14 @@
 mod http;
+mod utils;
 
-use std::{collections::HashMap, env, fs::File, io::Write, path::Path};
+use std::{collections::HashMap, env};
+use utils::{print_response, save_file};
 
 use http::{HttpRequest, HttpResponse};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[cfg(feature = "render_body")]
-fn render_body(response: &HttpResponse) {
-    use html2text::config;
-    use serde_json::{Value, to_string_pretty};
-    if response.headers.contains_key("content-type") {
-        let content_type = response.headers.get("content-type").unwrap();
-        let content_type = content_type
-            .split_once(';')
-            .unwrap_or((content_type, content_type))
-            .0;
-        match content_type {
-            "application/json" => {
-                if let Ok(raw) = str::from_utf8(response.content.as_slice()) {
-                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) {
-                        let text = serde_json::to_string_pretty(&value).unwrap();
-                        println!("{}", text);
-                    } else {
-                        println!("{}", raw);
-                    }
-                } else {
-                    println!("Error priting body");
-                };
-            }
-            "text/html" => {
-                if let Ok(raw) = str::from_utf8(response.content.as_slice()) {
-                    if let Ok(value) = config::rich()
-                        .use_doc_css()
-                        .string_from_read(raw.as_bytes(), 80)
-                    {
-                        println!("{}", value);
-                    } else {
-                        println!("{}", raw);
-                    }
-                } else {
-                    println!("Error priting body");
-                };
-            }
-            _ => {
-                if response.content.len() > 1024 {
-                    println!("<Binary {}>", response.content.len())
-                } else {
-                    println!(
-                        "{}",
-                        str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
-                    );
-                }
-            }
-        }
-    } else {
-        if response.content.len() > 1024 {
-            println!("<Binary {}>", response.content.len())
-        } else {
-            println!(
-                "{}",
-                str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
-            );
-        }
-    }
-}
-
-#[cfg(not(feature = "render_body"))]
-fn render_body(response: &HttpResponse) {
-    if response.content.len() > 1024 * 100 {
-        println!("<Binary {}>", response.content.len())
-    } else {
-        println!(
-            "{}",
-            str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
-        );
-    }
-}
-
+#[cfg(feature = "config_file")]
 fn parse_http_file(content: String) -> Vec<(String, HttpRequest)> {
     let mut result: Vec<(String, HttpRequest)> = Vec::new();
     let mut vars: HashMap<String, String> = HashMap::new();
@@ -113,7 +44,7 @@ fn parse_http_file(content: String) -> Vec<(String, HttpRequest)> {
     result
 }
 
-fn main() {
+fn args_parser() -> (String, String, HashMap<String, String>) {
     let mut input = String::new();
     let mut body = String::new();
     let mut args: HashMap<String, String> = HashMap::new();
@@ -157,11 +88,11 @@ fn main() {
         body.push('}');
     }
 
-    if !body.is_empty() {
-        input.push_str("\r\n");
-        input.push_str(&body);
-    }
+    (input, body, args)
+}
 
+fn main() {
+    let (input, body, args) = args_parser();
     let request = HttpRequest::parse(input);
     if request.is_err() {
         println!("Error: {}", request.err().unwrap());
@@ -171,31 +102,19 @@ fn main() {
     request
         .headers
         .insert("User-Agent", &format!("Sip/{}", VERSION));
-    // request
-    //     .headers
-    //     .insert("host".to_string(), "example.org".to_string());
+    println!("{}", body);
+    request.body = body.as_bytes().to_vec();
+    if !body.is_empty() {
+        request
+            .headers
+            .insert("Content-Legth", body.len().to_string().as_str());
+    }
 
     let response = request.brew();
-
     if let Ok(response) = response {
-        println!("{:?}", response.status.as_str());
-        for header in response.headers.iter() {
-            println!("- {}: {}", header.0, header.1);
-        }
-        println!("\n");
-        render_body(&response);
-        if response.status.is_ok()
-            && let Some(file) = args.get("O")
-        {
-            let path = Path::new(file);
-            let mut file = if path.exists() {
-                File::open(path)
-            } else {
-                File::create(path)
-            }
-            .unwrap();
-
-            let _ = file.write_all(response.content.as_slice());
+        print_response(&response);
+        if let Some(file) = args.get("O") {
+            save_file(file, response);
         };
     } else {
         println!("{:?}", response.err())
