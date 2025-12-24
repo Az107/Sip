@@ -40,6 +40,20 @@ impl HttpRequest {
         }
     }
 
+    // fn parse_url(raw: String) -> Result<Self, &'static str> {
+    //     let mut ssl = false;
+    //     if path.starts_with("https://") {
+    //         ssl = true;
+    //     }
+    //     let path = path
+    //         .strip_prefix("http://")
+    //         .unwrap_or(path.strip_prefix("https://").unwrap_or(path));
+    //     let (host, path) = path.split_once('/').unwrap_or((path, ""));
+    //     let host = host.to_string();
+    //     let mut path = path.to_string();
+    //     path.insert(0, '/');
+    // }
+
     pub fn parse(raw: String) -> Result<Self, &'static str> {
         let mut ssl = false;
         let mut lines = raw.split('\n');
@@ -72,10 +86,6 @@ impl HttpRequest {
         if !headers.contains_key("host") {
             headers.insert("host", &host);
         }
-        let mut body = Vec::new();
-        while let Some(line) = lines.next() {
-            body.extend_from_slice(line.as_bytes());
-        }
         // if !headers.contains_key("content-length") && body.is_empty() {
         //     headers.insert("content-length", &body.len().to_string());
         // }
@@ -86,7 +96,7 @@ impl HttpRequest {
             path,
             args: HashMap::new(),
             headers,
-            body,
+            body: Vec::new(),
         };
 
         Ok(request)
