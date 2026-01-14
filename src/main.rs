@@ -6,8 +6,6 @@ use arg_parser::args_parser;
 use std::env;
 use utils::{print_response, save_file};
 
-use http::HttpRequest;
-
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(feature = "config_file")]
@@ -62,7 +60,7 @@ fn main() {
     if !request.body.is_empty() {
         request
             .headers
-            .insert("Content-Legth", request.body.len().to_string().as_str());
+            .insert("Content-Length", request.body.len().to_string().as_str());
     }
 
     let response = request.brew();

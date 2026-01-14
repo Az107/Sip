@@ -37,6 +37,7 @@ impl RequestArgs {
         let mut path = path.to_string();
         path.insert(0, '/');
         let mut request = HttpRequest::new(method, &host, &path);
+        request.headers.insert("host", &host);
         request.ssl = ssl;
         request.body = self.body.as_bytes().to_vec();
         for (key, value) in self.headers.iter() {

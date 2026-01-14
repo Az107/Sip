@@ -50,8 +50,7 @@ impl Display for HttpRequest {
             write!(f, "{}: {}\r\n", k, v)?;
         }
         write!(f, "\r\n")?;
-        write!(f, "{}", &self.text().unwrap_or_default())?;
-        write!(f, "\r\n")
+        write!(f, "{}", &self.text().unwrap_or_default())
     }
 }
 
