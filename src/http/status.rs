@@ -152,6 +152,10 @@ impl HttpStatus {
         self.as_num() >= 200 && self.as_num() <= 299
     }
 
+    pub fn is_redirect(&self) -> bool {
+        self.as_num() >= 300 && self.as_num() <= 310
+    }
+
     /// Returns the standard reason phrase for this status code.
     ///
     /// For example: `HttpStatus::OK.to_string()` returns `"OK"`.

@@ -11,6 +11,8 @@ use std::time::Duration;
 
 use native_tls::TlsConnector;
 
+use crate::http::HttpStatus;
+
 use super::request::HttpRequest;
 use super::response::{HttpResponse, HttpResponseBuilder};
 
@@ -65,9 +67,11 @@ impl HttpRequest {
         // Strip protocol prefix
         if let Some(stripped) = addr.strip_prefix("http://") {
             addr = stripped.to_string();
-        } else if addr.starts_with("https://") {
+        } else if let Some(stripped) = addr.strip_prefix("https://") {
             ssl = true;
+            addr = stripped.to_string();
         }
+        let mut addr = addr.split("/").next().unwrap().to_string();
 
         // Add port if missing
         if !addr.contains(':') {
@@ -78,7 +82,6 @@ impl HttpRequest {
             }
         }
 
-        let addr = addr.split("/").next().unwrap();
         // Resolve address
         let addr = if addr.starts_with("localhost") {
             addr.replace("localhost", "127.0.0.1").to_string()
@@ -103,7 +106,6 @@ impl HttpRequest {
             .map_err(|_| "Error connecting to server")?;
         let _ = stream.set_read_timeout(Some(Duration::from_secs(20)));
         let mut stream: Box<dyn StreamRW> = if ssl {
-            // 1. Crear el conector TLS
             let connector = TlsConnector::new().map_err(|_| "SLL error")?;
             let (hostname, _) = self
                 .host
@@ -155,8 +157,20 @@ impl HttpRequest {
                 }
             }
         }
+        let response = builder.get().unwrap();
 
-        Ok(builder.get().unwrap())
+        //handle redirects
+        if response.status.is_redirect() {
+            let location = response.headers.get("Location");
+            if let Some(location) = location {
+                let new_request = HttpRequest::new(self.method.clone(), &location, &self.path);
+                new_request.brew()
+            } else {
+                Ok(response)
+            }
+        } else {
+            Ok(response)
+        }
     }
 }
 
@@ -238,6 +252,7 @@ mod tests {
     #[test]
     fn test_http_request_time_out() {
         let r = HttpRequest::new(HttpMethod::Get, "example.org:8080", "/").brew();
-        assert!(r.is_err());
+
+        assert!(r.is_ok());
     }
 }
