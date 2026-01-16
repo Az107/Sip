@@ -6,6 +6,7 @@ use crate::http::{HttpMethod, HttpRequest};
 pub struct RequestArgs {
     pub method: String,
     pub url: String,
+    pub host: String,
     pub body: String,
     pub headers: HashMap<String, String>,
     pub args: HashMap<String, String>,
@@ -16,6 +17,7 @@ impl RequestArgs {
         RequestArgs {
             method: String::new(),
             url: String::new(),
+            host: String::new(),
             body: String::new(),
             headers: HashMap::new(),
             args: HashMap::new(),
@@ -57,6 +59,17 @@ impl RequestArgs {
     }
 }
 
+fn host_from_url(url: &str) -> String {
+    //remove the protocol from the url
+    let url = url.strip_prefix("http://").unwrap_or(url);
+    let url = url.strip_prefix("https://").unwrap_or(url);
+    //remove the path from the url
+    let url = url.split('/').next().unwrap();
+    //remove the port from the url
+    let host = url.split(':').nth(0).unwrap().to_string();
+    host
+}
+
 enum State {
     Method,
     Url,
@@ -82,6 +95,8 @@ pub fn args_parser() -> RequestArgs {
             }
             State::Url => {
                 request_args.url = arg;
+                request_args.host = host_from_url(&request_args.url);
+
                 state = State::Body;
             }
             State::Body => {
@@ -121,3 +136,18 @@ pub fn args_parser() -> RequestArgs {
 //     }
 //     input.push_str(&arg);
 // }
+
+// TEST
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_host_from_url() {
+        assert_eq!(host_from_url("http://example.com:8080/path"), "example.com");
+        assert_eq!(host_from_url("https://example.com/path"), "example.com");
+        assert_eq!(host_from_url("example.com:8080/path"), "example.com");
+        assert_eq!(host_from_url("example.com/path"), "example.com");
+        assert_eq!(host_from_url("example.com"), "example.com");
+    }
+}

@@ -50,7 +50,6 @@ fn main() {
     let args = args_parser();
     println!("{:?}", args);
     let request = args.to_request();
-
     if request.is_err() {
         println!("Error: {}", request.err().unwrap());
         return;
@@ -59,6 +58,7 @@ fn main() {
     request
         .headers
         .insert("User-Agent", &format!("Sip/{}", VERSION));
+    request.headers.insert("Host", &format!("{}", args.host));
     if !request.body.is_empty() {
         request
             .headers

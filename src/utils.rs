@@ -11,7 +11,7 @@ pub fn save_file(file: &str, response: HttpResponse) {
     }
     .unwrap();
 
-    let _ = file.write_all(response.content.as_slice());
+    let _ = file.write_all(response.body.as_slice());
 }
 
 #[cfg(feature = "render_body")]
@@ -74,15 +74,34 @@ fn render_body(response: &HttpResponse) {
     }
 }
 
+fn print_utf8(body: Vec<u8>) {
+    println!(
+        "{}",
+        str::from_utf8(body.as_slice()).unwrap_or("Error printing body")
+    );
+}
+
+fn print_latin1(body: Vec<u8>) {
+    let body_text: String = body.iter().map(|&c| c as char).collect();
+    println!("{}", body_text);
+}
+
 #[cfg(not(feature = "render_body"))]
 fn render_body(response: &HttpResponse) {
-    if response.content.len() > 1024 * 100 {
-        println!("<Binary {}>", response.content.len())
+    if response.body.len() > 1024 * 100 {
+        println!("<Binary {}>", response.body.len())
     } else {
-        println!(
-            "{}",
-            str::from_utf8(response.content.as_slice()).unwrap_or("Error priting body")
-        );
+        let content_type = response.headers.get("Content-Type");
+        let encoding = content_type
+            .and_then(|ct| ct.split(';').nth(1))
+            .and_then(|ct| ct.strip_prefix(" charset="))
+            .unwrap_or("utf-8");
+
+        match encoding {
+            "utf-8" => print_utf8(response.body.clone()),
+            "ISO-8859-1" => print_latin1(response.body.clone()),
+            _ => println!("Unsupported encoding: {}", encoding),
+        }
     }
 }
 

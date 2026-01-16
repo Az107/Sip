@@ -8,7 +8,7 @@ use super::HttpStatus;
 pub struct HttpResponse {
     pub status: HttpStatus,
     pub headers: HttpHeaders,
-    pub content: Vec<u8>,
+    pub body: Vec<u8>,
 }
 
 use std::cmp::min;
@@ -49,7 +49,7 @@ impl HttpResponseBuilder {
             State::Finish => Some(HttpResponse {
                 status: self.status,
                 headers: self.headers.clone(),
-                content: self.body.clone(),
+                body: self.body.clone(),
             }),
             _ => None,
         }
