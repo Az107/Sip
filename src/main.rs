@@ -66,8 +66,8 @@ fn main() {
     let response = request.brew();
     if let Ok(response) = response {
         print_response(&response);
-        if let Some(file) = args.args.get("O") {
-            save_file(file, response);
+        if let Some(file) = args.get("out") {
+            save_file(&file, response);
         };
     } else {
         println!("{:?}", response.err())

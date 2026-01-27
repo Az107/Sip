@@ -3,13 +3,19 @@ use std::{collections::HashMap, env};
 use crate::http::{HttpMethod, HttpRequest};
 
 #[derive(Debug)]
+pub enum ArgKind {
+    Flag,
+    Value(String),
+}
+
+#[derive(Debug)]
 pub struct RequestArgs {
     pub method: String,
     pub url: String,
     pub host: String,
     pub body: String,
     pub headers: HashMap<String, String>,
-    pub args: HashMap<String, String>,
+    pub args: HashMap<String, ArgKind>,
 }
 
 impl RequestArgs {
@@ -49,6 +55,17 @@ impl RequestArgs {
         Ok(request)
     }
 
+    pub fn get(&self, key: &str) -> Option<String> {
+        if let Some(value) = self.args.get(key) {
+            match value {
+                ArgKind::Flag => None,
+                ArgKind::Value(v) => Some(v.clone()),
+            }
+        } else {
+            None
+        }
+    }
+
     fn get_state(&self) -> State {
         if self.method.is_empty() {
             State::Method
@@ -84,8 +101,12 @@ pub fn args_parser() -> RequestArgs {
     for arg in env::args().skip(1) {
         if arg.starts_with("-") {
             let key = arg.strip_prefix("-").unwrap().to_string();
-            let key = key.strip_prefix("-").unwrap_or(&key).to_string();
-            state = State::Arg(key);
+            if key.starts_with("-") {
+                let key = key.strip_prefix("-").unwrap_or(&key).to_string();
+                state = State::Arg(key);
+            } else {
+                request_args.args.insert(key, ArgKind::Flag);
+            }
             continue;
         }
 
@@ -111,7 +132,7 @@ pub fn args_parser() -> RequestArgs {
                 request_args.body.push_str(&arg);
             }
             State::Arg(k) => {
-                request_args.args.insert(k, arg);
+                request_args.args.insert(k, ArgKind::Value(arg));
                 state = request_args.get_state();
             }
         };
