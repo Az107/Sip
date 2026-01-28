@@ -56,11 +56,11 @@ fn main() {
     request
         .headers
         .insert("User-Agent", &format!("Sip/{}", VERSION));
-    request.headers.insert("Host", &format!("{}", args.host));
+    request.headers.insert("Host", &args.host.clone());
     if !request.body.is_empty() {
         request
             .headers
-            .insert("Content-Length", request.body.len().to_string().as_str());
+            .insert("Content-Length", &request.body.len().to_string());
     }
 
     let response = request.brew();

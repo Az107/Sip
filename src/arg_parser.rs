@@ -84,8 +84,7 @@ fn host_from_url(url: &str) -> String {
     //remove the path from the url
     let url = url.split('/').next().unwrap();
     //remove the port from the url
-    let host = url.split(':').nth(0).unwrap().to_string();
-    host
+    url.split(':').next().unwrap_or(url).to_string()
 }
 
 enum State {

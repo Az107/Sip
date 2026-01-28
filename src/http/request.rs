@@ -74,7 +74,7 @@ impl HttpRequest {
         path.insert(0, '/');
         let method = HttpMethod::from_str(raw_method);
         let mut headers = HttpHeaders::new();
-        while let Some(line) = lines.next() {
+        for line in lines {
             if !line.contains(':') || line.len() <= 1 {
                 break;
             }
